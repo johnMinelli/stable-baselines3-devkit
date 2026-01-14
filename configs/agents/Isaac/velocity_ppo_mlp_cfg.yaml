@@ -1,0 +1,68 @@
+# Reference: https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml#L32
+seed: 42
+device: "cuda:0"
+
+n_timesteps: 12_000_000_000
+n_steps: &rollout_steps 24  # sample the same number of steps that the buffer can contain
+n_epochs: 5
+# batch_size: 32768  # defaults to `rollout.buffer_size` * `n_envs`
+num_mini_batch: 4  # number of updates per batch. Good value is 32 samples per mini-batch. Those are accumulated following the grad_acc_steps value. Consider that a good update uses 4096*24/4=24k samples [Rudin et al.]
+gradient_accumulation_steps: 1  # Accumulated mini-batch updates. If higher than mini-batch steps you accumulate across rollouts num_mini_batches/4 = accumulated_steps
+mixed_precision: "no"  # "fp8" "fp16" "bf16"
+lr_scheduler: "adaptive"
+# lr_warmup_steps: 500
+
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: !!float 0.2
+clip_range_vf: !!float 0.2
+
+lr_value: !!float 1e-3
+ent_coef: 0.005
+vf_coef: 1.0
+normalize_advantage_per_mini_batch: false
+max_grad_norm: 1.0
+target_kl: 0.01
+
+agent_class: 'ppo_agent.PPO'
+policy: 'MlpPolicy'
+policy_kwargs:
+  net_arch: !!seq [256, 256]
+  activation: 'elu'
+  use_log_std: true
+  # Training parameters
+  optimizer_kwargs:
+    eps: !!float 1e-08
+
+rollout_buffer_class: 'RolloutBuffer'
+rollout_buffer_kwargs:
+  buffer_size: *rollout_steps
+  cpu_offload: false
+  num_workers: 0
+
+preprocessor_class: 'Gym_2_Mlp'
+preprocessor_kwargs:
+  squash_output: false
+  resize_images: !!seq [224, 224]
+  drop_images: true
+  # prompt_generator: 'FixedPromptGenerator("On the table there is a cube, grasp the cube")'
+
+  # the modes which require normalization procedure
+  observation_modes:
+    # state: mean_std
+    images.camera: min_max
+    images.base: min_max
+  action_modes:
+    # actions: mean_std
+
+  overwrite_stats: false
+  stats:  # define fixed normalization stats here using the mapped generic keys.
+
+  # mapping from gym to standard for datasource-parameters disentanglement
+  data_key_map:  # env_name to generic_key
+    images.base: image1
+    images.camera: image2
+    state: state
+    actions: actions
+
+# ... for the RL algorithm configuration of Isaac, `env_cfg` is not present because it is part of the gym env registration. It is specified in the `env_cfg_entry_point` tag.

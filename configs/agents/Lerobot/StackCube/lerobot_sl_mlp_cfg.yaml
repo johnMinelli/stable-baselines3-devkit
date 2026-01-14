@@ -1,0 +1,96 @@
+# Supervised Learning configuration for Army policy
+seed: 42
+device: "cuda:0"
+
+n_epochs: 100
+batch_size: 16
+gradient_accumulation_steps: 1  # Accumulated batch updates
+mixed_precision: "no"  # "fp8"  "fp16" "bf16"
+
+lr_value: !!float 8e-5
+lr_scheduler: constant
+mse_coef: 1.0
+max_grad_norm: 1.0
+
+agent_class: 'sl_agent.SL'
+policy: 'MlpPolicy'
+policy_kwargs:
+  dim_model: 512
+  final_ffn: true
+  action_horizon: &action_horizon 16  # for dataloader sampling
+  # Training parameters
+  optimizer_kwargs:
+    eps: !!float 1e-08
+    # optim_bits: 8
+
+preprocessor_class: 'Lerobot_2_Mlp'
+preprocessor_kwargs:
+  resize_images: !!seq [94, 94]
+  normalize_images: true
+  tokenizer_kwargs:
+    # model_path: 'algos/arch/modules/eagle2_hg'
+    # model_template: "qwen2-chat"
+    # num_image_token: 9
+    # padding_max_length: 60
+    # padding_side: "right"
+
+  observation_modes: "${..env_cfg.normalization.observation_modes}"
+  action_modes: "${..env_cfg.normalization.action_modes}"
+  # Lerobot ds usually includes stats. You can overwrite those with fixed stats here.
+  overwrite_stats: false
+  stats:
+  # Mapping for disentanglement from lerobot data to stats dictionary. This because we save the stats in the checkpoint and we want to be able to load&use them in a different simenv/dataset/whatever
+  data_key_map:
+    observation.images.base_camera: cam1
+    observation.images.hand_camera: cam2
+    observation.images.head_camera: cam2
+    observation.images.image_side_1: cam1
+    observation.images.image_side_2: cam2
+    observation.images.image_wrist_1: cam3
+    observation.images.image_wrist_2: cam4
+    observation.top: cam1
+    image: cam1
+    wrist_image: cam2
+    observation.state: state
+    state: state
+    action: action
+    actions: action
+
+
+env_cfg:  # configuration for offline imitation from dataset
+  name: maniskill
+  task: StackCube-v1
+  dataset_repo_id: johnMinelli/ManiSkill_StackCube-v1_recovery
+  # episodes: !!seq [0,1,5,54,82,97,57,14,16,17]
+  # episodes: !!seq [0,1,5,54,82,97,57,14,16,17, 230, 203, 256, 301, 305, 354, 329, 394, 395, 386]
+  # episodes: !!seq [0,1,5,54,82,97,57,14,16,17, 230, 203, 213, 214, 215, 227, 231, 232, 245, 248, 259, 260, 256, 269, 301, 305, 354, 329, 394, 395, 386, 383, 317, 323, 416, 424, 452, 440, 462, 486, 490, 493, 514, 516, 522, 539, 541, 546, 547, 578]
+  episodes:  # !!seq [0,1,5,54,82,97,57,14,16,17, 230, 203, 213, 214, 215, 227, 231, 232, 245, 248, 259, 260, 256, 269, 301, 305, 354, 329, 394, 395, 386, 383, 317, 323, 416, 424, 452, 440, 462, 486, 490, 493, 514, 516, 522, 539, 541, 546, 547, 578, 603, 604, 606, 608, 609, 611, 612, 615, 616, 619, 620, 621, 622, 623, 627, 628, 630, 633, 634, 636, 637, 638, 639, 640, 645, 649, 651, 653, 655, 656, 658, 661, 668, 670, 671, 673, 674, 676, 679, 683, 687, 688, 691, 692, 693, 694, 695, 698, 699, 703]
+
+  dataset_revision: v2.0
+  dataset_root:
+  video_backend: pyav
+
+  input_shapes:
+    observation.images.base_camera: [ 480, 640, 3 ]
+    observation.images.hand_camera: [ 480, 640, 3 ]
+    observation.state: [ 9 ]
+    observation.privileged: [ 30 ]
+  output_shapes:
+    action: [ *action_horizon, 8 ]
+  normalization:
+    observation_modes:
+      observation.state: min_max
+    action_modes:
+      action: min_max
+
+  fps: 20
+  delta_timestamps:
+    expert_mask: "[i / ${...env_cfg.fps} for i in range(${...policy_kwargs.action_horizon})]"
+    observation.images.base_camera: "[i / ${...env_cfg.fps} for i in range(${...policy_kwargs.action_horizon})]"
+    observation.images.hand_camera: "[i / ${...env_cfg.fps} for i in range(${...policy_kwargs.action_horizon})]"
+    observation.state: "[i / ${...env_cfg.fps} for i in range(${...policy_kwargs.action_horizon})]"
+    action: "[i / ${...env_cfg.fps} for i in range(${...policy_kwargs.action_horizon})]"
+
+  # Image augmentation settings
+  image_transforms:
+    enable: false

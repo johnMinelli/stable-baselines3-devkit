@@ -1,0 +1,45 @@
+seed: 42
+device: "cuda:0"
+# We omit training hp as most likely this is used only for inference
+
+agent_class: 'ppo_agent.PPO'
+# Policy name is read from the checkpoint
+policy:
+# You could provide args here setting `overwrite_policy_arguments=True` in `load()` method, but most likely in a config with an env (maniskill) in a supervised training (sl) we are doing inference, therefore, we can simply load the config from checkpoint
+policy_kwargs:
+
+preprocessor_class: 'Maniskill_2_Mlp'
+preprocessor_kwargs:
+  resize_images: !!seq [94, 94]
+  normalize_images: true
+  # prompt_generator: 'FixedPromptGenerator("")'
+
+  observation_modes:
+    state: min_max
+  action_modes:
+    action: min_max
+  # The simenv has no stats, but starting from a checkpoint (most likely) there are stats there.
+  # You can overwrite those with fixed stats here. In case no stats are provided (from a checkpoint or fixed here) default preprocessor's stats are used.
+  overwrite_stats: false
+  stats:
+  # Mapping for disentanglement from gym data to stats dictionary. This because we save the stats in the checkpoint and we want to be able to load&use them in a different simenv/dataset/whatever
+  data_key_map:
+    state: state
+    action: action
+
+# Environment configuration
+env_cfg:
+  obs_mode: "state"
+  control_mode: "pd_joint_delta_pos"
+  num_envs: null  # Will be set from args
+  render_mode: "human"
+  # sensor_configs:
+  #   StackCube-v1:
+  #     base_camera:
+  #       width: 640
+  #       height: 480
+  #     hand_camera:
+  #       fov: 2.3707963267948966
+  #       pose: [0., -0.01, 0., 0.9848, 0., -0.1736, 0.]  # p=[0., -0.01, 0.], q=[0.9848, 0., -0.1736, 0.]
+  #       width: 640
+  #       height: 480

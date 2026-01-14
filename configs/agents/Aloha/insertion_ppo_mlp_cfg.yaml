@@ -1,0 +1,67 @@
+seed: 42
+device: "cuda:0"
+
+n_timesteps: 12_000_000_000
+n_steps: &rollout_steps 24  # sample the same number of steps that the buffer can contain
+n_epochs: 5
+# batch_size: 32768  # defaults to `rollout.buffer_size` * `n_envs`
+num_mini_batch: 4  # number of updates per batch. Good value is 32 samples per mini-batch. Those are accumulated following the grad_acc_steps value. Consider that a good update uses 4096*24/4=24k samples [Rudin et al.]
+gradient_accumulation_steps: 1  # Accumulated mini-batch updates. If higher than mini-batch steps you accumulate across rollouts num_mini_batches/4 = accumulated_steps
+mixed_precision: "no"  # "fp8" "fp16" "bf16"
+lr_scheduler: "adaptive"
+# lr_warmup_steps: 500
+
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: !!float 0.2
+clip_range_vf: !!float 0.2
+
+lr_value: !!float 1e-3
+ent_coef: 0.005
+vf_coef: 1.0
+normalize_advantage_per_mini_batch: false
+max_grad_norm: 1.0
+target_kl: 0.01
+
+agent_class: 'ppo_agent.PPO'
+policy: 'MlpPolicy'
+policy_kwargs:
+  net_arch: !!seq [256, 256]
+  activation: 'elu'
+  use_log_std: true
+  # Training parameters
+  optimizer_kwargs:
+    eps: !!float 1e-08
+
+rollout_buffer_class: 'RolloutBuffer'
+rollout_buffer_kwargs:
+  buffer_size: *rollout_steps
+  cpu_offload: false
+  num_workers: 0
+
+preprocessor_class: 'Aloha_2_Mlp'
+preprocessor_kwargs:
+  resize_images: !!seq [224, 224]
+  normalize_images: true
+  # prompt_generator: 'FixedPromptGenerator("")'
+
+  # the modes which require normalization procedure
+  observation_modes:
+    state: min_max
+  action_modes:
+    actions: min_max
+
+  overwrite_stats: true
+  stats:  # define fixed normalization stats here using the mapped generic keys.
+    state:
+      "min": !!seq [-0.4468, -1.6024,  0.4323, -0.8558, -0.3000, -1.2071,  0.0998, -0.4902, -1.6039,  0.4160, -0.8465, -0.3000, -1.2708,  0.0998]
+      "max": !!seq [0.4799, 0.0724, 1.1976, 0.8360, 0.7891, 1.2530, 1.0525, 0.4736, 0.0804, 1.1977, 0.8578, 0.8068, 1.2450, 0.9748]
+    action:
+      "min": !!seq [-0.4470, -1.6034,  0.4284, -0.8552, -0.3000, -1.2073,  0.0000, -0.4906, -1.6047,  0.4120, -0.8505, -0.3000, -1.2710,  0.0000]
+      "max": !!seq [0.4801, 0.0714, 1.2085, 0.8359, 0.7819, 1.2545, 1.0000, 0.4742, 0.0795, 1.2085, 0.8627, 0.7996, 1.2448, 1.0000]
+
+  # mapping from gym to standard for datasource-parameters disentanglement
+  data_key_map:  # env_name to generic_key
+    observation.images.top: cam1
+    state: state
+    actions: actions
