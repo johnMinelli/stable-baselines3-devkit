@@ -29,7 +29,7 @@ This framework provides a unified interface for training policies using either s
 ### Flexible Training Algorithms
 - **Supervised Learning**: Behavior cloning from demonstrations
 - **On-policy RL**: PPO, Recurrent PPO, Transformer PPO (! efficient rollout buffer implementation !)
-- **Off-policy RL**: (Work in progress)
+- **Off-policy RL**: SAC
 
 ### Out-of-the-box Features
 - Distributed training with Accelerate
@@ -55,18 +55,18 @@ The framework follows a layered architecture that separates concerns:
 2. **Preprocessors**
    - Transform source-specific data formats to policy inputs
    - Handle normalization, image processing, sequence formatting
-   - Examples: `Gym_2_Mlp`, `Gym_2_Lstm`, `Aloha_2_Lstm`
+   - Examples: `Gym_2_Mlp`, `Gym_2_Lstm`, `Gym_2_Sac`, `Aloha_2_Lstm`
 
 3. **Agents**
    - Manage training loops (rollout collection, batch optimization)
    - Interface with policies through preprocessors
    - Handle loss computation and gradient updates
-   - Examples: `PPO`, `RecurrentPPO`, `TransformerPPO`, `SL`
+   - Examples: `PPO`, `RecurrentPPO`, `TransformerPPO`, `SAC`, `SL`
 
 4. **Policies**
    - Neural network architectures (actor-critic or standalone)
    - Independent of data source or training algorithm
-   - Examples: `MlpPolicy`, `LSTMPolicy`, `TransformerPolicy`, `TCNPolicy`
+   - Examples: `MlpPolicy`, `LSTMPolicy`, `TransformerPolicy`, `SACPolicy`, `TCNPolicy`
 
 5. **Entry Points**
    - `train.py`: Online RL from simulation

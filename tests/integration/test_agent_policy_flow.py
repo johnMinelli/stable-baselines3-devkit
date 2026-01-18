@@ -8,6 +8,7 @@ from algos.ppo_agent import PPO
 from algos.ppo_recurrent_agent import RecurrentPPO
 from algos.ppo_transformer_agent import TransformerPPO
 from algos.sl_agent import SL
+from algos.sac_agent import SAC
 from common.logger import Logger
 from tests.fixtures.mock_envs import make_dummy_env, DummyVecEnv
 from tests.fixtures.conftest import device, cuda_device
@@ -168,6 +169,182 @@ class TestPPOAgents:
             agent.collect_rollouts(agent.env, callbacks, agent.rollout_buffer, n_rollout_steps=32)
 
             assert agent.rollout_buffer.pos == 32
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+
+class TestSACAgents:
+    """Test SAC (off-policy) agent with compatible policies."""
+
+    @pytest.fixture(scope="function")
+    def dict_obs_env(self, cuda_device):
+        """Create a dict observation vectorized environment (mimics wrapped env format)."""
+        return DummyVecEnv([lambda: make_dummy_env("dict_obs", state_dim=36, action_dim=4) for _ in range(2)], device=cuda_device)
+
+    def test_sac_with_mlp_policy(self, dict_obs_env, cuda_device):
+        """Test SAC agent with MLP policy on wrapped environment."""
+        try:
+            agent = SAC(
+                policy="MlpPolicy",
+                env=dict_obs_env,
+                batch_size=8,
+                learning_starts=10,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 100},
+                device=cuda_device,
+            )
+
+            agent.set_logger(Logger())
+            _, callbacks = agent._setup_learn(10000)
+
+            # Collect some experiences
+            from stable_baselines3.common.type_aliases import TrainFreq, TrainFrequencyUnit
+            train_freq = TrainFreq(frequency=16, unit=TrainFrequencyUnit.STEP)
+            agent.collect_rollouts(
+                agent.env, callbacks, train_freq, agent.replay_buffer, learning_starts=0
+            )
+
+            assert agent.replay_buffer.pos > 0
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    def test_sac_train_step(self, dict_obs_env, cuda_device):
+        """Test SAC agent can perform a training step after collecting experiences."""
+        try:
+            agent = SAC(
+                policy="MlpPolicy",
+                env=dict_obs_env,
+                batch_size=8,
+                learning_starts=10,
+                train_freq=(1, "step"),
+                gradient_steps=2,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 100},
+                device=cuda_device,
+            )
+
+            agent.set_logger(Logger())
+            _, callbacks = agent._setup_learn(10000)
+
+            # Collect enough experiences for training
+            from stable_baselines3.common.type_aliases import TrainFreq, TrainFrequencyUnit
+            train_freq = TrainFreq(frequency=32, unit=TrainFrequencyUnit.STEP)
+            agent.collect_rollouts(
+                agent.env, callbacks, train_freq, agent.replay_buffer, learning_starts=0
+            )
+
+            # Perform training steps
+            initial_updates = agent._n_updates
+            agent.train(gradient_steps=2)
+
+            # Check that training occurred
+            assert agent._n_updates > initial_updates
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    def test_sac_auto_entropy_tuning(self, dict_obs_env, cuda_device):
+        """Test SAC agent with automatic entropy coefficient tuning."""
+        try:
+            agent = SAC(
+                policy="MlpPolicy",
+                env=dict_obs_env,
+                batch_size=8,
+                learning_starts=10,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                ent_coef="auto",  # Enable automatic entropy tuning
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 100},
+                device=cuda_device,
+            )
+
+            agent.set_logger(Logger())
+
+            # Check that entropy coefficient optimizer was created
+            assert agent.ent_coef_optimizer is not None
+            assert agent.log_ent_coef is not None
+            assert agent.log_ent_coef.requires_grad is True
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    def test_sac_fixed_entropy_coef(self, dict_obs_env, cuda_device):
+        """Test SAC agent with fixed entropy coefficient."""
+        try:
+            agent = SAC(
+                policy="MlpPolicy",
+                env=dict_obs_env,
+                batch_size=8,
+                learning_starts=10,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                ent_coef=0.2,  # Fixed entropy coefficient
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 100},
+                device=cuda_device,
+            )
+
+            agent.set_logger(Logger())
+
+            # Check that no entropy coefficient optimizer was created
+            assert agent.ent_coef_optimizer is None
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    def test_sac_target_network_update(self, dict_obs_env, cuda_device):
+        """Test SAC target network soft update (Polyak update)."""
+        try:
+            agent = SAC(
+                policy="MlpPolicy",
+                env=dict_obs_env,
+                batch_size=8,
+                learning_starts=10,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                tau=0.005,  # Soft update coefficient
+                target_update_interval=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 100},
+                device=cuda_device,
+            )
+
+            agent.set_logger(Logger())
+            _, callbacks = agent._setup_learn(10000)
+
+            # Store initial target network weights
+            initial_target_params = [p.clone() for p in agent.critic_target.parameters()]
+
+            # Collect experiences and train
+            from stable_baselines3.common.type_aliases import TrainFreq, TrainFrequencyUnit
+            train_freq = TrainFreq(frequency=32, unit=TrainFrequencyUnit.STEP)
+            agent.collect_rollouts(
+                agent.env, callbacks, train_freq, agent.replay_buffer, learning_starts=0
+            )
+            agent.train(gradient_steps=2)
+
+            # Check that target network was updated
+            updated_target_params = list(agent.critic_target.parameters())
+            params_changed = any(
+                not torch.allclose(initial, updated)
+                for initial, updated in zip(initial_target_params, updated_target_params)
+            )
+            assert params_changed, "Target network should be updated via Polyak averaging"
+
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
 

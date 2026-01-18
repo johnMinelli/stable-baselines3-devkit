@@ -58,6 +58,7 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": AnymalDFlatEnvCfg,
+        "custom_sac_mlp_cfg_entry_point": f"{agents.__name__}.Isaac:velocity_sac_mlp_cfg.yaml",
         "custom_ppo_mlp_cfg_entry_point": f"{agents.__name__}.Isaac:velocity_ppo_mlp_cfg.yaml",
         "custom_ppo_lstm_cfg_entry_point": f"{agents.__name__}.Isaac:velocity_ppo_lstm_cfg.yaml",
         "custom_ppo_tr_cfg_entry_point": f"{agents.__name__}.Isaac:velocity_ppo_tr_cfg.yaml",

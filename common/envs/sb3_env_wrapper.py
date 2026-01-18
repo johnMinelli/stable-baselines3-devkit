@@ -324,7 +324,7 @@ class Sb3EnvStdWrapper(VecEnv):
             "rew": torch.where(episode_mask, self._ep_rew_buf, torch.full_like(self._ep_rew_buf, float("nan"))),
             "len": torch.where(episode_mask, self._ep_len_buf, torch.full_like(self._ep_len_buf, float("nan"))),
         }
-        # Handle terminal observations
+        # Handle terminal observations. Note: we haven't the last observation pre-reset so we use the current
         if isinstance(obs, dict):
             infos["terminal_obs"] = {}
             for key, value in obs.items():

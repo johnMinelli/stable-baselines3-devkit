@@ -1,12 +1,14 @@
 import gc
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Dict, Generator, List, Optional, Union
+from typing import Dict, Generator, List, Optional, Union, Any
 
+import numpy as np
 import torch
 from accelerate import Accelerator
 from einops import repeat
 from gymnasium import spaces
+from stable_baselines3.common.noise import VectorizedActionNoise, NormalActionNoise, ActionNoise
 from torch.utils.data import DataLoader, Dataset
 
 from common.utils import DictObj
@@ -110,13 +112,38 @@ class TorchBuffer:
 
 
 class ReplayBuffer(TorchBuffer):
-    def __init__(self, *args, **kwargs):
+    """
+    Replay buffer used in off-policy algorithms like SAC/TD3.
+
+    :param buffer_size: Max number of elements in the buffer
+    :param n_envs: Number of parallel environments
+    :param observation_space: Observation space
+    :param action_space: Action space
+    :param device: PyTorch device
+    :param cpu_offload: Enable CPU offloading
+    :param num_workers: Number of workers for data loading
+    :param add_action_noise: Whether to add action noise
+    :param optimize_memory_usage: Enable a memory efficient variant
+        of the replay buffer which reduces by almost a factor two the memory used,
+        at a cost of more complexity.
+        See https://github.com/DLR-RM/stable-baselines3/issues/37#issuecomment-637501195
+        and https://github.com/DLR-RM/stable-baselines3/pull/28#issuecomment-637559274
+        Cannot be used in combination with handle_timeout_termination.
+    """
+    def __init__(self, *args, add_action_noise=False, optimize_memory_usage=True, **kwargs):
         super().__init__(*args, **kwargs)
 
+
+        self.optimize_memory_usage = optimize_memory_usage
+        self.action_noise: ActionNoise = VectorizedActionNoise(NormalActionNoise(np.array([0]),np.array([0.1])), self.n_envs) if add_action_noise else None
         self.observations = {key: torch.zeros((self.n_envs, self.buffer_size, *obs_info["shape"]), device=self.device, dtype=eval("torch."+str(obs_info["dtype"]))) for key, obs_info in self.obs_shapes.items()} \
             if self.is_dict_obs else torch.zeros((self.n_envs, self.buffer_size, *self.obs_shapes), device=self.device)
-        self.next_observations = {k: torch.zeros_like(v) for k, v in self.observations.items()} \
-            if self.is_dict_obs else torch.zeros_like(self.observations)
+
+        if not optimize_memory_usage:
+            # When optimizing memory, `observations` contains also the next observation
+            self.next_observations = {k: torch.zeros_like(v) for k, v in self.observations.items()} \
+                if self.is_dict_obs else torch.zeros_like(self.observations)
+
         self.actions = torch.zeros((self.n_envs, self.buffer_size, self.action_dim), device=self.device)
         self.rewards = torch.zeros((self.n_envs, self.buffer_size), device=self.device)
         self.dones = torch.zeros((self.n_envs, self.buffer_size), device=self.device)
@@ -130,14 +157,22 @@ class ReplayBuffer(TorchBuffer):
         reward: torch.Tensor,
         done: torch.Tensor,
     ) -> None:
+        # Copy to avoid modification by reference
         if self.is_dict_obs:
             for key, tensor in obs.items():
-                self.observations[key][:, self.pos] = tensor
-                self.next_observations[key][:, self.pos] = next_obs[key]
+                self.observations[key][:, self.pos] = tensor.clone()
+                if self.optimize_memory_usage:
+                    self.observations[key][:, (self.pos + 1) % self.buffer_size] = next_obs[key].clone()
+                else:
+                    self.next_observations[key][:, self.pos] = next_obs[key].clone()
         else:
-            self.observations[:, self.pos] = obs
-            self.next_observations[:, self.pos] = next_obs
-        self.actions[:, self.pos] = action
+            self.observations[:, self.pos] = obs.clone()
+            if self.optimize_memory_usage:
+                self.observations[:, (self.pos + 1) % self.buffer_size] = next_obs.clone()
+            else:
+                self.next_observations[:, self.pos] = next_obs.clone()
+
+        self.actions[:, self.pos] = torch.clip(action+torch.from_numpy(self.action_noise()).to(action.device), -1, 1) if self.action_noise is not None else action
         self.rewards[:, self.pos] = reward
         self.dones[:, self.pos] = done
 
@@ -146,28 +181,62 @@ class ReplayBuffer(TorchBuffer):
             self.full = True
             self.pos = 0
 
-    def sample(self, batch_size: int) -> ReplayBufferSamples:
-        stored_samples = self.buffer_size if self.full else self.pos
-        assert batch_size <= stored_samples, f"Not enough data ({stored_samples} samples stored) to sample a batch of size {batch_size}"
+    def restart_noise(self, dones: torch.Tensor) -> None:
+        """Reset noise for corresponding environments that have been resetted."""
+        if self.action_noise is not None and torch.any(dones):
+            self.action_noise.reset(**dict(indices=torch.nonzero(dones).tolist()))
 
-        step_indices = torch.randint(0, stored_samples, (batch_size,), device=self.device)
-        env_indices = torch.randint(0, self.n_envs, (batch_size,), device=self.device)
+    def get(self, batch_size: int) -> Generator[ReplayBufferSamples, Any, Any]:
+        """
+        Sample elements from the replay buffer.
+        Custom sampling when using memory efficient variant,
+        as we should not sample the element with index `self.pos`
+        See https://github.com/DLR-RM/stable-baselines3/pull/28#issuecomment-637559274
 
-        if self.is_dict_obs:
-            observations = {key: tensor[env_indices, step_indices].to(self.out_device) for key, tensor in self.observations.items()}
-            next_observations = {key: tensor[env_indices, step_indices].to(self.out_device) for key, tensor in self.next_observations.items()}
-        else:
-            observations = self.observations[env_indices, step_indices].to(self.out_device)
-            next_observations = self.next_observations[env_indices, step_indices].to(self.out_device)
+        :param batch_size: Number of elements to sample
+        :return: Generator yielding ReplayBufferSamples
+        """
+        stored_samples = (self.buffer_size if self.full else self.pos) * self.n_envs
+        if not self.full and batch_size > stored_samples:  # In case the buffer is not full we wait to get enough data before training
+            print(f"Training step skipped: not enough data ({stored_samples} samples stored) to sample a batch of size {batch_size}.")
+            return []
 
-        return ReplayBufferSamples(
-            observations=observations,
-            actions=self.actions[env_indices, step_indices],
-            next_observations=next_observations,
-            dones=(self.dones[env_indices, step_indices] * (1 - self.timeouts[env_indices, step_indices])),
-            rewards=self.rewards[env_indices, step_indices],
-            mask=torch.ones_like(self.rewards[env_indices, step_indices]),
-        )
+        while True:
+            if not self.optimize_memory_usage:
+                step_indices = torch.randint(0, self.buffer_size if self.full else self.pos, (batch_size,), device=self.device)
+            else:  # Do not sample the element with index `self.pos` as the transition is invalid
+                if self.full:
+                    step_indices = (torch.randint(1, self.buffer_size, (batch_size,), device=self.device) + self.pos) % self.buffer_size
+                else:
+                    step_indices = torch.randint(0, self.pos, (batch_size,), device=self.device)
+
+            env_indices = torch.randint(0, self.n_envs, (batch_size,), device=self.device)
+
+            if self.optimize_memory_usage:
+                # Get next observations from the (step + 1) % buffer_size position
+                next_step_indices = (step_indices + 1) % self.buffer_size
+                if self.is_dict_obs:
+                    observations = {key: tensor[env_indices, step_indices].to(self.out_device) for key, tensor in self.observations.items()}
+                    next_observations = {key: tensor[env_indices, next_step_indices].to(self.out_device) for key, tensor in self.observations.items()}
+                else:
+                    observations = self.observations[env_indices, step_indices].to(self.out_device)
+                    next_observations = self.observations[env_indices, next_step_indices].to(self.out_device)
+            else:
+                if self.is_dict_obs:
+                    observations = {key: tensor[env_indices, step_indices].to(self.out_device) for key, tensor in self.observations.items()}
+                    next_observations = {key: tensor[env_indices, step_indices].to(self.out_device) for key, tensor in self.next_observations.items()}
+                else:
+                    observations = self.observations[env_indices, step_indices].to(self.out_device)
+                    next_observations = self.next_observations[env_indices, step_indices].to(self.out_device)
+
+            yield ReplayBufferSamples(
+                observations=observations,
+                actions=self.actions[env_indices, step_indices].to(self.out_device),
+                next_observations=next_observations,
+                dones=(self.dones[env_indices, step_indices] * (1 - self.timeouts[env_indices, step_indices])).to(self.out_device),
+                rewards=self.rewards[env_indices, step_indices].to(self.out_device),
+                mask=torch.ones_like(self.rewards[env_indices, step_indices]).to(self.out_device),
+            )
 
     def reset(self) -> None:
         self.pos = 0

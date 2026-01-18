@@ -75,6 +75,8 @@ def main(args_cli, env_cfg, agent_cfg):
     # Load the trained agent
     print(f"Loading model from {checkpoint_path}")
     agent_cfg = process_sb3_cfg(agent_cfg)
+    if "replay_buffer_kwargs" in agent_cfg:  # reduce unnecessary memory usage
+        agent_cfg['replay_buffer_kwargs']["buffer_size"] = 0
     agent = eval(agent_cfg.pop("agent_class")).load(checkpoint_path, env, overwrite_policy_arguments=False, **agent_cfg)
 
     success, mean_reward, mean_length = agent.predict_episodes(

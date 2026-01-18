@@ -99,7 +99,7 @@ def main():
         logger.log_hp(env_cfg, os.path.join(logger.log_dir, "params", "env.yaml"))
         logger.log_hp(agent_cfg, os.path.join(logger.log_dir, "params", "agent.yaml"))
     checkpoint_callback = CheckpointCallback(
-        save_freq=args_cli.save_interval, save_path=logger.log_dir, name_prefix="model", verbose=2
+        save_freq=args_cli.save_interval, save_replay_buffer=True, save_path=logger.log_dir, name_prefix="model", verbose=2
     )
     # post-process agent configuration
     agent_cfg = process_sb3_cfg(agent_cfg)

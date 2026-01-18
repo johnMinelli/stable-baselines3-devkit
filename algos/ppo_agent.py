@@ -47,8 +47,8 @@ class PPO(OnPolicyAlgorithm, InferenceInterface):
         lr_linear_end_fraction: Optional[float] = 0.005,
         n_steps: int = 128,
         batch_size: int = None,
-        num_mini_batch: int = 1,
-        n_epochs: int = 10,
+        num_mini_batch: int = 4,
+        n_epochs: int = 5,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
         clip_range: Union[float, Schedule] = 0.2,
@@ -137,7 +137,7 @@ class PPO(OnPolicyAlgorithm, InferenceInterface):
         :param seed: Seed for the pseudo random generators. Defaults to None.
         :param device: Device (cpu, cuda, ...) on which the code should be run.
         Setting it to auto, the code will be run on the GPU if possible.
-        :param _init_setup_model: Whether to build the network at the creation of the instance. Defaults to False.
+        :param _init_setup_model: Whether to build the network at the creation of the instance. Defaults to True.
         """
         super().__init__(
             policy,
@@ -354,7 +354,6 @@ class PPO(OnPolicyAlgorithm, InferenceInterface):
         while n_steps < n_rollout_steps:
 
             with torch.no_grad():
-                # Convert to pytorch tensor or to TensorDict
                 actions, values, distribution_output = self.policy(self._last_obs)
                 log_probs, mean, std = distribution_output
 

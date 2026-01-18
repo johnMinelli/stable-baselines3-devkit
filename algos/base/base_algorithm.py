@@ -901,7 +901,7 @@ class BaseAlgorithm(ABC):
                     continue
                 # Set the data attribute directly to avoid issue when using optimizers
                 # See https://github.com/DLR-RM/stable-baselines3/issues/391
-                recursive_setattr(model, f"{name}.data", pytorch_variables[name].data)
+                recursive_setattr(model, f"{name}.data", pytorch_variables[name].data.to(device))
 
         # Sample gSDE exploration matrix, so it uses the right device
         # see issue #44

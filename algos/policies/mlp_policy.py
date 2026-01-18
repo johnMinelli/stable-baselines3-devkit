@@ -126,12 +126,8 @@ class MlpPolicy(BasePolicy):
         joint_deltas = self.action_net(features)
 
         # Compute MSE loss with masking
-        mse_loss = F.mse_loss(joint_deltas, actions, reduction="none")
-        mse_mask = (
-            torch.logical_and(obs["expert_mask"], ~obs["action_is_pad"])
-            if "expert_mask" in obs
-            else ~obs["action_is_pad"]
-        ) if "action_is_pad" in obs else torch.ones_like(mse_loss, dtype=torch.bool)
+        mse_loss = F.mse_loss(joint_deltas.squeeze(), actions.squeeze(), reduction="none")
+        mse_mask = (torch.logical_and(obs["expert_mask"], ~obs["action_is_pad"]) if "expert_mask" in obs else ~obs["action_is_pad"]) if "action_is_pad" in obs else torch.ones_like(mse_loss, dtype=torch.bool)
 
         return {"mse_loss": mse_loss[mse_mask].mean()}
 

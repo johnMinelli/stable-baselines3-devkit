@@ -82,7 +82,7 @@ class TestReplayBuffer:
         assert buffer.pos == 1
         assert buffer.full is True
 
-    def test_replay_buffer_sample(self, buffer_config, device):
+    def test_replay_buffer_get_batches(self, buffer_config, device):
         """Test sampling from replay buffer."""
         buffer = ReplayBuffer(**buffer_config)
 
@@ -101,7 +101,7 @@ class TestReplayBuffer:
 
         # Sample
         batch_size = 2
-        samples = buffer.sample(batch_size)
+        samples = next(buffer.get(batch_size))
 
         assert samples.observations.shape == (batch_size, *obs_shape)
         assert samples.actions.shape == (batch_size, *action_shape)
@@ -138,7 +138,7 @@ class TestReplayBuffer:
         buffer.add(obs, next_obs, action, reward, done)
 
         # Sample
-        samples = buffer.sample(1)
+        samples = next(buffer.get(1))
 
         assert isinstance(samples.observations, dict)
         assert "state" in samples.observations
@@ -172,7 +172,7 @@ class TestReplayBuffer:
         buffer.add(obs, next_obs, actions, rewards, dones)
 
         # Sample should return data on output device
-        samples = buffer.sample(1)
+        samples = next(buffer.get(1))
         assert samples.observations.device.type == "cuda"
 
 

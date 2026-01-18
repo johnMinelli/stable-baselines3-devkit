@@ -2,18 +2,7 @@ import inspect
 import os
 import re
 from types import SimpleNamespace
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    ItemsView,
-    KeysView,
-    List,
-    Sequence,
-    Tuple,
-    Union,
-    ValuesView,
-)
+from typing import (Any, Callable, Dict, ItemsView, KeysView, List, Sequence, Tuple, Union, ValuesView, Iterable, )
 
 import numpy as np
 import torch
@@ -335,6 +324,19 @@ def batch(*args: Tuple[Union[np.array, Sequence]]):
     if len(args) == 1:
         return x[0]
     return tuple(x)
+
+
+def get_parameters_by_name(model: torch.nn.Module, included_names: Iterable[str]) -> list[torch.Tensor]:
+    """
+    Extract parameters from the state dict of ``model``
+    if the name contains one of the strings in ``included_names``.
+
+    :param model: the model where the parameters come from.
+    :param included_names: substrings of names to include.
+    :return: List of parameters values (Pytorch tensors)
+        that matches the queried names.
+    """
+    return [param for name, param in model.state_dict().items() if any([key in name for key in included_names])]
 
 
 def get_checkpoint_path(

@@ -1,4 +1,4 @@
-from typing import Any, Dict, Union
+from typing import Any, Dict, Tuple, Union
 
 import numpy as np
 import torch
@@ -94,7 +94,7 @@ class GymPreprocessor(Preprocessor):
                 else:  # handle single image
                     if not isinstance(_obs, torch.Tensor):
                         _obs = torch.tensor(_obs, device=self.device)
-                    if _obs.dim() == 4 and _obs.shape[1] in [1,3,4] and _obs.shape[-1] in [1,3,4]:
+                    if _obs.dim() == 4 and _obs.shape[1] in [1, 3, 4] and _obs.shape[-1] in [1, 3, 4]:
                         _obs = _obs.permute(0, 3, 1, 2)
                     if self.normalize_images:
                         if _obs.max() > 1:
@@ -231,3 +231,47 @@ class Gym_2_Mlp(GymPreprocessor):
 # Aliases for other policy types that use the same preprocessing
 Gym_2_Lstm = Gym_2_Mlp
 Gym_2_Tr = Gym_2_Mlp
+
+
+class Gym_2_Sac(GymPreprocessor):
+
+    def __init__(self, **kwargs):
+
+        super().__init__(**kwargs)
+
+        self.proc_observation_space = spaces.Dict({
+            "privileged": spaces.Box(low=-1, high=1, shape=(0,), dtype=np.float32),
+            "state": spaces.Box(low=-10, high=10, shape=(36,), dtype=np.float32),
+            # "images": spaces.Box(low=-1, high=1, shape=(2, 3, 94, 94), dtype=np.float32),
+        })
+        self.proc_action_space = spaces.Box(low=-1, high=1, shape=self.action_space.shape)
+
+        self.action_space_high = torch.tensor(self.proc_action_space.high, device=self.device)
+        self.action_space_low = torch.tensor(self.proc_action_space.low, device=self.device)
+
+    def forward(self, observations=None):
+        assert isinstance(observations, dict), "Processing implemented only for `Dict` observations. Did you wrap correctly the datasource to obtain here the shared data source?"
+
+        norm_obs = self.normalize_observations(self.preprocess_observations(observations))
+
+        norm_obs["privileged"] = norm_obs["state"][..., norm_obs["state"].shape[-1]-min(self.proc_observation_space["privileged"].shape[-1], norm_obs["state"].shape[-1]) :]
+        norm_obs["state"] = norm_obs["state"][..., : self.proc_observation_space["state"].shape[-1]]
+        if "images" in norm_obs:
+            norm_obs["images"] = torch.stack([norm_obs["images"][k] for k in norm_obs["images"]], dim=-4) if isinstance(norm_obs["images"], dict) else norm_obs["images"]
+
+        return norm_obs
+
+    def forward_post(self, actions: Union[torch.Tensor, Dict[str, torch.Tensor]]) -> Union[Tuple[torch.Tensor, torch.Tensor], Dict[str, torch.Tensor]]:
+        assert isinstance(self.action_space, (spaces.Box, spaces.Discrete)), "Processing implemented only for `Box` action space"
+
+        # Rescale the action from [low, high] to [-1, 1]
+        if isinstance(self.action_space, spaces.Box):
+            # We store the scaled action in the buffer
+            buffer_actions = 2.0 * ((actions - self.action_space_low) / (self.action_space_high - self.action_space_low)) - 1.0
+            actions = self.action_space_low + (0.5 * (buffer_actions + 1.0) * (self.action_space_high - self.action_space_low))
+        else:
+            # Discrete case, no need to normalize or clip
+            buffer_actions = actions
+            actions = actions
+
+        return buffer_actions, actions

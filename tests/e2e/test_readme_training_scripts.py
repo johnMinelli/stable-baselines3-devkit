@@ -171,6 +171,37 @@ class TestTrainScriptIntegration:
 
         assert result.returncode == 0, f"Training failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
 
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_sac_mlp_isaac_quick_training(self):
+        """Test SAC MLP (off-policy) training with Isaac Lab for a few steps."""
+        try:
+            import isaaclab
+        except ImportError:
+            pytest.skip("Isaac Lab not available")
+
+        cmd = [
+            sys.executable, "train.py",
+            "--task", "Isaac-Velocity-Flat-Anymal-D-v0",
+            "--envsim", "isaaclab",
+            "--headless",
+            "--num_envs", "2",
+            "--agent", "Isaac/velocity_sac_mlp_cfg",
+            "--device", "cuda",
+            "--sim_device", "cuda",
+            "--max_iterations", "2",  # Just 2 iterations
+            "--save_interval", "1000000",  # Don't save
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 minute timeout
+        )
+
+        assert result.returncode == 0, f"SAC Training failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+
 
 class TestTrainOffScriptIntegration:
     """Test train_off.py with real datasets."""
@@ -325,6 +356,7 @@ class TestConfigCompatibility:
             "configs/agents/Isaac/lift_ppo_mlp_cfg.yaml",
             "configs/agents/Isaac/velocity_ppo_lstm_cfg.yaml",
             "configs/agents/Isaac/velocity_ppo_tr_cfg.yaml",
+            "configs/agents/Isaac/velocity_sac_mlp_cfg.yaml",
             "configs/agents/Maniskill/stack_ppo_mlp_cfg.yaml",
             "configs/agents/Aloha/insertion_ppo_mlp_cfg.yaml",
             "configs/agents/Lerobot/StackCube/lerobot_sl_lstm_cfg.yaml",

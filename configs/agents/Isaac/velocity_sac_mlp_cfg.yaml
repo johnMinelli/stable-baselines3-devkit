@@ -1,0 +1,59 @@
+# Reference: https://github.com/DLR-RM/rl-baselines3-zoo/blob/master/hyperparams/ppo.yml#L32
+seed: 42
+device: "cuda:0"
+
+n_timesteps: 1_200_000_000
+batch_size: 256
+lr_scheduler: "constant"
+
+gamma: 0.99
+lr_value: !!float 3e-4
+tau: 0.005  # Soft update coefficient (Polyak update)
+ent_coef: "auto"
+learning_starts: 10000
+use_sde: false
+train_freq: !!seq [1, "step"]
+gradient_steps: 1
+
+agent_class: 'sac_agent.SAC'
+policy: 'MlpPolicy'
+policy_kwargs:
+  net_arch: !!seq [128, 128, 128]
+  clip_mean: !!float 2.0
+  # Training parameters
+  optimizer_kwargs:
+    eps: !!float 1e-08
+
+replay_buffer_class: 'ReplayBuffer'
+replay_buffer_kwargs:
+  buffer_size: 400_000
+  cpu_offload: false
+  num_workers: 0
+  optimize_memory_usage: false
+
+preprocessor_class: 'Gym_2_Sac'
+preprocessor_kwargs:
+  squash_output: false
+  resize_images: !!seq [224, 224]
+  drop_images: true
+  # prompt_generator: 'FixedPromptGenerator("On the table there is a cube, grasp the cube")'
+
+  # the modes which require normalization procedure
+  observation_modes:
+    # state: mean_std
+    images.camera: min_max
+    images.base: min_max
+  action_modes:
+    # actions: mean_std
+
+  overwrite_stats: false
+  stats:  # define fixed normalization stats here using the mapped generic keys.
+
+  # mapping from gym to standard for datasource-parameters disentanglement
+  data_key_map:  # env_name to generic_key
+    images.base: image1
+    images.camera: image2
+    state: state
+    actions: actions
+
+# ... for the RL algorithm configuration of Isaac, `env_cfg` is not present because it is part of the gym env registration. It is specified in the `env_cfg_entry_point` tag.

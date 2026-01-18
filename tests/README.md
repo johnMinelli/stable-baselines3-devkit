@@ -36,10 +36,12 @@ tests/
 |-----------|------------|-------------------|-------------------|
 | Preprocessors | ✅ | ✅ | ✅ |
 | Policies | ✅ | ✅ | ✅ |
+| SAC Policy | ✅ | ✅ | ✅ |
 | Buffers | ✅ | ✅ | ✅ |
 | PPO Agent | ✅ | ✅ | 🔴 Needs env |
 | RecurrentPPO | ✅ | ✅ | 🔴 Needs env |
 | TransformerPPO | ✅ | ✅ | 🔴 Needs env |
+| SAC Agent | ✅ | ✅ | 🔴 Needs env |
 | SL Agent | ✅ | ✅ | 🔴 Needs data |
 | train.py | ❌ | ❌ | ✅ (if env installed) |
 | train_off.py | ❌ | ❌ | ✅ (if data exists) |

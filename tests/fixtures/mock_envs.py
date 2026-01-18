@@ -195,7 +195,7 @@ class DummyVecEnv(SB3DummyVecEnv):
             done = terminated or truncated
             if done:
                 # Save final observation where user can get it
-                self.buf_infos[env_idx]["terminal_observation"] = obs
+                self.buf_infos[env_idx]["terminal_obs"] = obs
                 # Reset and get new observation
                 obs = self.envs[env_idx].reset()[0]
             if isinstance(obs, dict):
@@ -225,7 +225,48 @@ class DummyVecEnv(SB3DummyVecEnv):
 
             # For each key, create a list of values from each env
             for key in all_keys:
-                infos_dict[key] = [info.get(key, None) for info in self.buf_infos]
+                values = [info.get(key, None) for info in self.buf_infos]
+                # Convert terminal_obs to tensor format for SAC compatibility
+                if key == "terminal_obs":
+                    # SAC expects terminal_obs as dict of tensors (for dict obs) or tensor (for simple obs)
+                    first_valid = next((v for v in values if v is not None), None)
+                    if first_valid is not None:
+                        if isinstance(first_valid, dict):
+                            # Dict observations - stack each key into tensor
+                            infos_dict[key] = {
+                                obs_key: torch.stack([
+                                    torch.from_numpy(v[obs_key]) if v is not None else torch.zeros_like(torch.from_numpy(first_valid[obs_key]))
+                                    for v in values
+                                ]).to(self.device)
+                                for obs_key in first_valid.keys()
+                            }
+                        else:
+                            # Simple observations - stack into tensor
+                            infos_dict[key] = torch.stack([
+                                torch.from_numpy(v) if v is not None else torch.zeros_like(torch.from_numpy(first_valid))
+                                for v in values
+                            ]).to(self.device)
+                    else:
+                        # No terminal obs this step - create placeholder with NaN based on observation space
+                        if isinstance(self.buf_obs, dict):
+                            infos_dict[key] = {
+                                obs_key: torch.full((self.num_envs, *arr.shape[1:]), float("nan"), dtype=torch.float32).to(self.device)
+                                for obs_key, arr in self.buf_obs.items()
+                            }
+                        else:
+                            infos_dict[key] = torch.full((self.num_envs, *self.buf_obs.shape[1:]), float("nan"), dtype=torch.float32).to(self.device)
+                else:
+                    infos_dict[key] = values
+
+        # Ensure terminal_obs always exists for SAC compatibility (use NaN for invalid/placeholder values)
+        if "terminal_obs" not in infos_dict:
+            if isinstance(self.buf_obs, dict):
+                infos_dict["terminal_obs"] = {
+                    obs_key: torch.full((self.num_envs, *arr.shape[1:]), float("nan"), dtype=torch.float32).to(self.device)
+                    for obs_key, arr in self.buf_obs.items()
+                }
+            else:
+                infos_dict["terminal_obs"] = torch.full((self.num_envs, *self.buf_obs.shape[1:]), float("nan"), dtype=torch.float32).to(self.device)
 
         return (
             obs_tensors,

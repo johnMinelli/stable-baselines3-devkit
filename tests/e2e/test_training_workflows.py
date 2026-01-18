@@ -84,10 +84,12 @@ class TestOnPolicyTrainingWorkflow:
 
             # Evaluate
             ppo_env.reset()
-            agent.predict_rollout(env=ppo_env, callback=None, n_episodes=1)
+            mean_success, mean_reward, mean_length = agent.predict_rollout(env=ppo_env, callback=None, n_episodes=1)
 
-            # Should complete without errors
-            assert True
+            # Should complete without errors and return valid metrics
+            assert isinstance(mean_success, (int, float, torch.Tensor))
+            assert isinstance(mean_reward, (int, float, torch.Tensor))
+            assert isinstance(mean_length, (int, float, torch.Tensor))
 
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
@@ -174,6 +176,290 @@ class TestOnPolicyTrainingWorkflow:
 
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")
+
+
+class TestOffPolicyTrainingWorkflow:
+    """End-to-end tests for SAC (off-policy) training."""
+
+    @pytest.fixture
+    def sac_env(self, cuda_device):
+        """Create environment for SAC testing."""
+        return DummyVecEnv([
+            lambda: make_dummy_env("dict_obs", state_dim=36, action_dim=4, episode_length=50)
+            for _ in range(2)
+        ], device=cuda_device)
+
+    @pytest.mark.slow
+    def test_sac_with_callbacks(self, sac_env, cuda_device, tmp_path):
+        """Test SAC training with callbacks."""
+        try:
+            from algos.sac_agent import SAC
+            from common.callbacks import CheckpointCallback
+
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+
+            # Create checkpoint callback
+            checkpoint_callback = CheckpointCallback(
+                save_freq=100,
+                save_path=str(tmp_path),
+                name_prefix="test_model",
+            )
+
+            # Train
+            agent.learn(total_timesteps=200, callback=checkpoint_callback)
+
+            # Check that checkpoint was saved
+            checkpoints = list(tmp_path.glob("test_model_*.zip"))
+            assert len(checkpoints) > 0
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_evaluation(self, sac_env, cuda_device):
+        """Test SAC evaluation after training."""
+        try:
+            from algos.sac_agent import SAC
+
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+            agent.learn(total_timesteps=150)
+
+            # Evaluate
+            sac_env.reset()
+            mean_success, mean_reward, mean_length = agent.predict_rollout(
+                env=sac_env, callback=None, n_episodes=2
+            )
+
+            # Should complete without errors and return valid metrics
+            assert isinstance(mean_success, (int, float, torch.Tensor))
+            assert isinstance(mean_reward, (int, float, torch.Tensor))
+            assert isinstance(mean_length, (int, float, torch.Tensor))
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_save_and_load_model(self, sac_env, cuda_device, tmp_path):
+        """Test saving and loading a trained SAC model."""
+        try:
+            from algos.sac_agent import SAC
+
+            # Train agent
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+            agent.learn(total_timesteps=150)
+
+            # Save
+            save_path = tmp_path / "test_model.zip"
+            agent.save(str(save_path))
+
+            assert save_path.exists()
+
+            # Load
+            loaded_agent = SAC.load(str(save_path), env=sac_env, device=cuda_device)
+
+            # Test loaded agent
+            sac_env.reset()
+            loaded_agent.predict_rollout(env=sac_env, callback=None, n_episodes=1)
+
+            return True
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_resume_training(self, sac_env, cuda_device, tmp_path):
+        """Test resuming SAC training from a checkpoint."""
+        try:
+            from algos.sac_agent import SAC
+
+            # Initial training
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+            agent.learn(total_timesteps=150)
+            initial_timesteps = agent.num_timesteps
+
+            # Save
+            save_path = tmp_path / "checkpoint.zip"
+            agent.save(str(save_path))
+
+            # Load and resume
+            loaded_agent = SAC.load(str(save_path), env=sac_env, device=cuda_device)
+
+            loaded_agent.set_logger(Logger())
+            loaded_agent.learn(total_timesteps=100, reset_num_timesteps=False)
+
+            # Should have trained more
+            assert loaded_agent.num_timesteps > initial_timesteps
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_auto_entropy_training(self, sac_env, cuda_device):
+        """Test SAC training with automatic entropy tuning."""
+        try:
+            from algos.sac_agent import SAC
+
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                ent_coef="auto",  # Auto entropy tuning
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+
+            # Store initial entropy coefficient
+            initial_ent_coef = torch.exp(agent.log_ent_coef.detach()).item()
+
+            # Train
+            agent.learn(total_timesteps=200)
+
+            # Entropy coefficient may have changed during training
+            final_ent_coef = torch.exp(agent.log_ent_coef.detach()).item()
+
+            # Both should be positive
+            assert initial_ent_coef > 0
+            assert final_ent_coef > 0
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_save_and_load_replay_buffer(self, sac_env, cuda_device, tmp_path):
+        """Test saving and loading SAC replay buffer."""
+        try:
+            from algos.sac_agent import SAC
+
+            # Create and train agent to populate replay buffer
+            agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+            agent.learn(total_timesteps=150)
+
+            # Record buffer state before saving
+            buffer_pos_before = agent.replay_buffer.pos
+            buffer_full_before = agent.replay_buffer.full
+
+            # Save replay buffer
+            buffer_save_path = tmp_path / "replay_buffer.pkl"
+            agent.save_replay_buffer(str(buffer_save_path))
+
+            assert buffer_save_path.exists()
+
+            # Create new agent and load the replay buffer
+            new_agent = SAC(
+                policy="MlpPolicy",
+                env=sac_env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                replay_buffer_checkpoint=str(buffer_save_path),  # Load from checkpoint
+                device=cuda_device,
+                verbose=0,
+            )
+
+            # Verify buffer was loaded correctly
+            assert new_agent.replay_buffer.pos == buffer_pos_before or new_agent.replay_buffer.full
+            assert new_agent.replay_buffer.full == buffer_full_before
+
+            # Continue training with loaded buffer
+            new_agent.set_logger(Logger())
+            new_agent.learn(total_timesteps=100)
+
+            # Should be able to train without errors
+            assert new_agent._n_updates > 0
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+        except AttributeError as e:
+            pytest.skip(f"Replay buffer save/load not supported: {e}")
 
 
 class TestAgentsTraining:
@@ -279,6 +565,39 @@ class TestAgentsTraining:
             agent.learn(total_timesteps=256)
 
             assert agent.num_timesteps == 256
+
+        except ImportError as e:
+            pytest.skip(f"Required modules not available: {e}")
+
+    @pytest.mark.slow
+    def test_sac_agent_training_loop(self, env, cuda_device):
+        """Test complete SAC (off-policy) training loop."""
+        try:
+            from algos.sac_agent import SAC
+
+            agent = SAC(
+                policy="MlpPolicy",
+                env=env,
+                batch_size=32,
+                learning_starts=50,
+                train_freq=(1, "step"),
+                gradient_steps=1,
+                preprocessor_class="Gym_2_Sac",
+                preprocessor_kwargs={"drop_images": True},
+                replay_buffer_class="ReplayBuffer",
+                replay_buffer_kwargs={"buffer_size": 500},
+                device=cuda_device,
+                verbose=0,
+            )
+
+            agent.set_logger(Logger())
+
+            # Train for a few steps
+            agent.learn(total_timesteps=200)
+
+            # Check that training completed
+            assert agent.num_timesteps == 200
+            assert agent._n_updates > 0
 
         except ImportError as e:
             pytest.skip(f"Required modules not available: {e}")

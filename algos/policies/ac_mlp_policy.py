@@ -178,7 +178,7 @@ class MlpPolicy(BasePolicy):
         Forward method.
 
         :param obs: State with shape (batch_size, len_seq, state_len)
-        :return: Tuple of (policy, value) where policy has shape (batch_size, num_action) and value has shape (batch_size, 1)
+        :return: Policy output with shape (batch_size, num_action)
         """
         # Switch to eval mode (this affects batch norm / dropout)
         mode = self.training
