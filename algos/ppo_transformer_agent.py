@@ -212,7 +212,8 @@ class TransformerPPO(OnPolicyAlgorithm, InferenceInterface):
             **self.policy_kwargs,
         ).to(self.device)
 
-        self.rollout_buffer = eval(self.rollout_buffer_class)(
+        self.rollout_buffer = (
+            eval(self.rollout_buffer_class) if isinstance(self.rollout_buffer_class, str) else self.rollout_buffer_class)(
             observation_space=self.observation_space,
             action_space=self.action_space,
             device=self.device,

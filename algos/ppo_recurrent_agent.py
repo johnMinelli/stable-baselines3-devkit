@@ -214,7 +214,8 @@ class RecurrentPPO(OnPolicyAlgorithm, InferenceInterface):
 
         self._last_memory_shape = self.policy.hidden_state_shape
         self._last_memory = torch.zeros(self.n_envs, *self._last_memory_shape, device=self.device)  # Note: the policy memory may necessitate custom init
-        self.rollout_buffer = eval(self.rollout_buffer_class)(
+        self.rollout_buffer = (
+            eval(self.rollout_buffer_class) if isinstance(self.rollout_buffer_class, str) else self.rollout_buffer_class)(
             observation_space=self.observation_space,
             action_space=self.action_space,
             memory_shape=self._last_memory_shape,

@@ -262,7 +262,8 @@ class OffPolicyAlgorithm(BaseAlgorithm):
             self.replay_buffer_kwargs["env"] = self.env
 
         if self.replay_buffer_checkpoint is None:
-            self.replay_buffer = eval(self.replay_buffer_class)(
+            self.replay_buffer = (
+                eval(self.replay_buffer_class) if isinstance(self.replay_buffer_class, str) else self.replay_buffer_class)(
                 observation_space=self.observation_space,
                 action_space=self.action_space,
                 device=self.device,

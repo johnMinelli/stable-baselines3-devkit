@@ -133,7 +133,6 @@ class ReplayBuffer(TorchBuffer):
     def __init__(self, *args, add_action_noise=False, optimize_memory_usage=True, **kwargs):
         super().__init__(*args, **kwargs)
 
-
         self.optimize_memory_usage = optimize_memory_usage
         self.action_noise: ActionNoise = VectorizedActionNoise(NormalActionNoise(np.array([0]),np.array([0.1])), self.n_envs) if add_action_noise else None
         self.observations = {key: torch.zeros((self.n_envs, self.buffer_size, *obs_info["shape"]), device=self.device, dtype=eval("torch."+str(obs_info["dtype"]))) for key, obs_info in self.obs_shapes.items()} \
@@ -147,7 +146,6 @@ class ReplayBuffer(TorchBuffer):
         self.actions = torch.zeros((self.n_envs, self.buffer_size, self.action_dim), device=self.device)
         self.rewards = torch.zeros((self.n_envs, self.buffer_size), device=self.device)
         self.dones = torch.zeros((self.n_envs, self.buffer_size), device=self.device)
-        self.timeouts = torch.zeros((self.n_envs, self.buffer_size), device=self.device)
 
     def add(
         self,
@@ -233,7 +231,7 @@ class ReplayBuffer(TorchBuffer):
                 observations=observations,
                 actions=self.actions[env_indices, step_indices].to(self.out_device),
                 next_observations=next_observations,
-                dones=(self.dones[env_indices, step_indices] * (1 - self.timeouts[env_indices, step_indices])).to(self.out_device),
+                dones=self.dones.to(self.out_device),
                 rewards=self.rewards[env_indices, step_indices].to(self.out_device),
                 mask=torch.ones_like(self.rewards[env_indices, step_indices]).to(self.out_device),
             )

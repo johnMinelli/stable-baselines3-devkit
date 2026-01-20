@@ -217,7 +217,8 @@ class SAC(OffPolicyAlgorithm, InferenceInterface):
         ).to(self.device)
 
         if self.replay_buffer_checkpoint is None:
-            self.replay_buffer = eval(self.replay_buffer_class)(
+            self.replay_buffer = (
+                eval(self.replay_buffer_class) if isinstance(self.replay_buffer_class, str) else self.replay_buffer_class)(
                 observation_space=self.observation_space,
                 action_space=self.action_space,
                 device=self.device,
@@ -230,11 +231,6 @@ class SAC(OffPolicyAlgorithm, InferenceInterface):
             self.load_replay_buffer(
                 self.replay_buffer_checkpoint, truncate_last_traj=self.replay_buffer_kwargs.get("optimize_memory_usage")
             )
-
-        self.policy = self.policy_class(  # type: ignore[assignment]
-            self.observation_space, self.action_space, self.lr_schedule, use_sde=self.use_sde, **self.policy_kwargs
-        )
-        self.policy = self.policy.to(self.device)
     
         # The entropy coefficient or entropy can be learned automatically
         # see Automating Entropy Adjustment for Maximum Entropy RL section
@@ -261,7 +257,7 @@ class SAC(OffPolicyAlgorithm, InferenceInterface):
         )
         self.policy, self.policy.actor.optimizer, self.policy.critic.optimizer =  self.accelerator.prepare(self.policy, self.policy.actor.optimizer, self.policy.critic.optimizer)
         if self.ent_coef_optimizer: self.ent_coef_optimizer = self.accelerator.prepare(self.ent_coef_optimizer)
-        self.policy.optimizer = [self.policy.actor.optimizer, self.policy.critic.optimizer] + [self.ent_coef_optimizer] if self.ent_coef_optimizer is not None else []
+        self.policy.optimizer = [self.policy.actor.optimizer, self.policy.critic.optimizer] + ([self.ent_coef_optimizer] if self.ent_coef_optimizer is not None else [])
         self._create_aliases()
         # self.accelerator.dataloader_config.non_blocking = True
         self.replay_buffer.set_accelerator(self.accelerator)
@@ -422,13 +418,19 @@ class SAC(OffPolicyAlgorithm, InferenceInterface):
 
             # Recover terminal obs for reset envs since info
             obs_ = deepcopy(obs)
+            dones_ = dones
             if dones.any():
-                obs_[dones] = self.process_obs(
-                    {k: v if isinstance(v, str) else v[dones] if isinstance(v, torch.Tensor) else {k2: v2[dones] for k2, v2 in v.items()} for k, v in infos["terminal_obs"].items()} if isinstance(infos["terminal_obs"], dict) \
+                terminal_obs_processed = self.process_obs({k: v if isinstance(v, str) else v[dones] if isinstance(v, torch.Tensor) else {k2: v2[dones] for k2, v2 in v.items()} for k, v in infos["terminal_obs"].items()} if isinstance(infos["terminal_obs"], dict) \
                     else infos["terminal_obs"][dones])
+                if isinstance(obs_, dict):
+                    for key in obs_:
+                        obs_[key][dones] = terminal_obs_processed[key]
+                else:
+                    obs_[dones] = terminal_obs_processed
+                dones_ = dones & ~infos.get("truncated", torch.zeros_like(dones))
 
             # Store data in replay buffer
-            replay_buffer.add(self._last_obs, obs_, buffer_actions, rewards, dones)
+            replay_buffer.add(self._last_obs, obs_, buffer_actions, rewards, dones_)
             replay_buffer.restart_noise(dones)
 
             # For DQN, check if the target network should be updated and update the exploration schedule.
@@ -456,7 +458,7 @@ class SAC(OffPolicyAlgorithm, InferenceInterface):
         # Switch to train mode (this affects batch norm / dropout)
         self.policy.set_training_mode(True)
         # Update optimizers learning rate
-        optimizers = [self.actor.optimizer, self.critic.optimizer] + [self.ent_coef_optimizer] if self.ent_coef_optimizer is not None else []
+        optimizers = [self.actor.optimizer, self.critic.optimizer] + ([self.ent_coef_optimizer] if self.ent_coef_optimizer is not None else [])
         self._update_learning_rate(optimizers)
 
         for rollout_data in self.replay_buffer.get(self.batch_size):

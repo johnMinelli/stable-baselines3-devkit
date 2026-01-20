@@ -110,7 +110,8 @@ class OnPolicyAlgorithm(BaseAlgorithm):
             else:
                 self.rollout_buffer_class = RolloutBuffer
 
-        self.rollout_buffer = self.rollout_buffer_class(
+        self.rollout_buffer = (
+            eval(self.rollout_buffer_class) if isinstance(self.rollout_buffer_class, str) else self.rollout_buffer_class)(
             self.n_steps,
             self.observation_space,  # type: ignore[arg-type]
             self.action_space,

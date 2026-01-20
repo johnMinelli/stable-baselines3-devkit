@@ -246,6 +246,10 @@ class Gym_2_Sac(GymPreprocessor):
         })
         self.proc_action_space = spaces.Box(low=-1, high=1, shape=self.action_space.shape)
 
+        # see https://araffin.github.io/post/tune-sac-isaac-sim/
+        # self.action_space_high = torch.tensor([1.1, 2.6, 0.7, 1.9, 1.3, 2.6, 3.4, 3.8, 3.4, 3.4, 1.9, 2.1], device=self.device)
+        # self.action_space_low = torch.tensor([-2.0, -0.4, -2.6, -1.3, -2.2, -1.9, -0.7, -0.4, -2.1, -2.4, -2.5, -1.7], device=self.device)
+
         self.action_space_high = torch.tensor(self.proc_action_space.high, device=self.device)
         self.action_space_low = torch.tensor(self.proc_action_space.low, device=self.device)
 
