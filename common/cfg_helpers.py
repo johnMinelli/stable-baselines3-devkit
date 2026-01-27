@@ -118,6 +118,7 @@ def get_cfg(args_cli: argparse.Namespace) -> Dict[str, Any] | T:
         _agent_cfg = OmegaConf.to_container(_cfg, resolve=True)
         _agent_cfg["seed"] = args_cli.seed if args_cli.seed is not None else _agent_cfg["seed"]
         args_cli.seed = _agent_cfg["seed"] if args_cli.seed is None else args_cli.seed
+        args_cli.sim_device = args_cli.sim_device if args_cli.sim_device is not None else args_cli.device if args_cli.device is not None else _agent_cfg["device"]
         _agent_cfg["device"] = args_cli.device if args_cli.device is not None else _agent_cfg["device"]
         args_cli.device = _agent_cfg["device"] if args_cli.device is None else args_cli.device
         if args_cli.max_iterations is not None:
