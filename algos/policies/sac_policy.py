@@ -295,7 +295,7 @@ class SACPolicy(BasePolicy):
             normalize_images=normalize_images,
         )
 
-        actor_arch, critic_arch = get_actor_critic_arch(net_arch)
+        actor_arch, critic_arch = get_actor_critic_arch(list(net_arch))
 
         self.net_arch = net_arch
         self.activation_fn = activation_fn
