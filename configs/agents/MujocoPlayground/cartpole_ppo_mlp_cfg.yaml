@@ -1,0 +1,72 @@
+# MuJoCo Playground - CartpoleBalance PPO configuration
+# Reference: https://github.com/google-deepmind/mujoco_playground
+seed: 42
+device: "cuda:0"
+
+n_timesteps: 10_000_000
+n_steps: &rollout_steps 32
+n_epochs: 5
+num_mini_batch: 4
+gradient_accumulation_steps: 1
+mixed_precision: "no"
+lr_scheduler: "adaptive"
+
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: !!float 0.2
+clip_range_vf: !!float 0.2
+
+lr_value: !!float 3e-4
+ent_coef: 0.0
+vf_coef: 0.5
+normalize_advantage_per_mini_batch: true
+max_grad_norm: 0.5
+target_kl: 0.01
+
+agent_class: 'ppo_agent.PPO'
+policy: 'MlpPolicy'
+policy_kwargs:
+  net_arch: !!seq [256, 256]
+  activation: 'tanh'
+  use_log_std: true
+  optimizer_kwargs:
+    eps: !!float 1e-05
+
+rollout_buffer_class: 'RolloutBuffer'
+rollout_buffer_kwargs:
+  buffer_size: *rollout_steps
+  cpu_offload: false
+  num_workers: 0
+
+# Use Gym preprocessor since MuJoCo Playground outputs are similar to standard gym
+preprocessor_class: 'Gym_2_Mlp'
+preprocessor_kwargs:
+  squash_output: false
+  drop_images: false  # Keep images if render_cameras=True
+  discrete_actions: false
+  normalize_images: true
+  resize_images: !!seq [64, 64]
+
+  # MuJoCo Playground observations are typically normalized, minimal preprocessing needed
+  observation_modes:
+    state: null  # No normalization for state
+  action_modes:
+    actions: null
+
+  overwrite_stats: false
+  stats: {}
+
+  data_key_map:
+    state: state
+    policy: state
+    camera: image1
+    actions: actions
+
+# Environment configuration for MuJoCo Playground
+env_cfg:
+  max_episode_steps: 1000
+  render_mode: "human"
+  camera_resolution: !!seq [64, 64]
+  # config_overrides:  # Optional MuJoCo Playground config overrides
+  #   ctrl_dt: 0.02
+  #   sim_dt: 0.002

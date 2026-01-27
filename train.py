@@ -25,18 +25,27 @@ def main():
         import gym_aloha  # noqa: F401
     if args_cli.envsim == "maniskill":
         import mani_skill.envs  # noqa: F401
+    if args_cli.envsim == "mujoco_playground":
+        from mujoco_playground import registry  # noqa: F401
     # **customize at necessity with required import**
 
     from common.envs.sb3_env_wrapper import Sb3EnvStdWrapper, process_sb3_cfg
 
     def create_env():
-        env = gym.make(args_cli.task, **env_cfg)
+        # MuJoCo Playground uses registry.load() instead of gym.make()
+        if args_cli.envsim == "mujoco_playground":
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundGymWrapper
+            # je do the porting from jax structures to gym
+            env = MjxPlaygroundGymWrapper(args_cli.task, **env_cfg)
+        else:
+            env = gym.make(args_cli.task, **env_cfg)
+
         # wrap for video recording
         if args_cli.video:
             video_kwargs = {
                 "video_folder": os.path.join(logger.log_dir, "videos", "train"),
                 "step_trigger": lambda step: step % args_cli.video_interval == 0,
-                "video_length": args_cli.video_length,
+                "video_length": 0,
                 "disable_logger": True,
             }
             print("[INFO] Recording videos during training.")
@@ -48,7 +57,7 @@ def main():
             from common.envs.aloha_wrapper import AlohaStdWrapper
 
             env = AlohaStdWrapper(env)
-        if args_cli.envsim == "maniskill":
+        elif args_cli.envsim == "maniskill":
             from mani_skill.vector.wrappers.gymnasium import ManiSkillVectorEnv
 
             from common.envs.maniskill_wrapper import (
@@ -59,6 +68,10 @@ def main():
             env = ManiSkillVectorEnv(env, auto_reset=True, ignore_terminations=True, record_metrics=False)
             env = FlattenActionSpaceWrapper(env)
             env = ManiSkillEnvStdWrapper(env)
+        elif args_cli.envsim == "mujoco_playground":
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            env = MjxPlaygroundStdWrapper(env)
         elif args_cli.envsim == "isaaclab" and isinstance(env.unwrapped, DirectMARLEnv):
             env = multi_agent_to_single_agent(env)
         # **customize at necessity with required wrapper other envs**
@@ -158,7 +171,6 @@ if __name__ == "__main__":
         from sapien import Pose
 
         _agent_cfg = get_cfg(_args_cli)
-
         _env_cfg = {
             "obs_mode": _agent_cfg["env_cfg"].get("obs_mode", "state+rgb"),
             "control_mode": _agent_cfg["env_cfg"].get("control_mode", "pd_joint_delta_pos"),
@@ -186,6 +198,19 @@ if __name__ == "__main__":
                     q = camera_cfg["pose"][3:]
                     _env_cfg["sensor_configs"][camera_name]["pose"] = Pose(p=p, q=q)
         del _agent_cfg["env_cfg"]
+
+    elif _args_cli.envsim == "mujoco_playground":      
+        _agent_cfg = get_cfg(_args_cli)
+        _env_cfg = {
+            "num_envs": _args_cli.num_envs,
+            "seed": _agent_cfg.get("seed"),
+            "device": _args_cli.sim_device,
+            "render_mode": _agent_cfg.get("env_cfg", {}).get("render_mode", None) if not _args_cli.video else "rgb_array",
+            "max_episode_steps": _agent_cfg.get("env_cfg", {}).get("max_episode_steps", 1000),
+            "camera_resolution": _agent_cfg.get("env_cfg", {}).get("camera_resolution", (64, 64)),
+        }
+        if "env_cfg" in _agent_cfg:
+            del _agent_cfg["env_cfg"]
 
     # launch script
     if _args_cli.sweep_id is not None:

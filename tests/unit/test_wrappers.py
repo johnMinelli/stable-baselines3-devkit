@@ -15,7 +15,7 @@ import pytest
 import torch
 from gymnasium import spaces
 
-from common.envs.sb3_env_wrapper import Sb3EnvStdWrapper, process_sb3_cfg
+from common.envs.sb3_env_wrapper import Sb3EnvStdWrapper
 
 
 class TestIsaacEnv:
@@ -24,6 +24,7 @@ class TestIsaacEnv:
     @pytest.fixture
     def mock_isaac_env(self):
         """Create a mock Isaac-style environment."""
+
         class MockIsaacEnv:
             def __init__(self):
                 self.num_envs = 4
@@ -87,6 +88,7 @@ class TestManiSkillWrapper:
     @pytest.fixture
     def mock_maniskill_env(self):
         """Create a mock ManiSkill-style environment."""
+
         class MockManiSkillEnv:
             def __init__(self):
                 self.num_envs = 2
@@ -113,7 +115,7 @@ class TestManiSkillWrapper:
                         "base_camera": {
                             "rgb": torch.randint(0, 255, (self.num_envs, 3, 128, 128), dtype=torch.uint8),
                         }
-                    }
+                    },
                 }
                 info = {}
                 return obs, info
@@ -125,7 +127,7 @@ class TestManiSkillWrapper:
                         "base_camera": {
                             "rgb": torch.randint(0, 255, (self.num_envs, 3, 128, 128), dtype=torch.uint8),
                         }
-                    }
+                    },
                 }
                 rewards = torch.randn(self.num_envs)
                 terminated = torch.zeros(self.num_envs, dtype=torch.bool)
@@ -176,6 +178,114 @@ class TestManiSkillWrapper:
             pytest.skip(f"ManiSkill wrapper not available: {e}")
 
 
+class TestMjxWrapper:
+    """Test MuJoCo Playground environment wrapper."""
+
+    @pytest.fixture
+    def mock_mjx_env(self):
+        """Create a mock MuJoCo Playground-style environment."""
+
+        class MockMjxPlaygroundEnv:
+            def __init__(self):
+                self.num_envs = 2
+                self.sim_device = "cpu"
+                self.unwrapped = self
+                self.render_mode = None
+                # MjxPlaygroundGymWrapper uses "state" key (converted to "policy" by MjxPlaygroundStdWrapper)
+                self.single_observation_space = spaces.Dict({
+                    "state": spaces.Box(low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32),
+                })
+                self.single_action_space = spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
+
+                self.observation_space = spaces.Dict({
+                    "state": spaces.Box(low=-np.inf, high=np.inf, shape=(self.num_envs, 12), dtype=np.float32),
+                })
+                self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(self.num_envs, 4), dtype=np.float32)
+
+            def reset(self, **kwargs):
+                obs = torch.randn(self.num_envs, 12)
+                info = {}
+                return obs, info
+
+            def step(self, action):
+                obs = torch.randn(self.num_envs, 12)
+                rewards = torch.randn(self.num_envs)
+                terminated = torch.zeros(self.num_envs, dtype=torch.bool)
+                truncated = torch.zeros(self.num_envs, dtype=torch.bool)
+                info = {}
+                return obs, rewards, terminated, truncated, info
+
+            def render(self):
+                pass
+
+            def close(self):
+                pass
+
+        return MockMjxPlaygroundEnv()
+
+    def test_mjx_wrapper_initialization(self, mock_mjx_env):
+        """Test MJX wrapper initialization."""
+        try:
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            wrapper = MjxPlaygroundStdWrapper(mock_mjx_env)
+
+            assert wrapper.num_envs == 2
+            assert hasattr(wrapper, "single_observation_space")
+
+        except ImportError as e:
+            pytest.skip(f"MJX wrapper not available: {e}")
+
+    def test_mjx_wrapper_observation_space(self, mock_mjx_env):
+        """Test that MJX wrapper creates correct observation space."""
+        try:
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            wrapper = MjxPlaygroundStdWrapper(mock_mjx_env)
+
+            # Should have policy key for state
+            assert "policy" in wrapper.single_observation_space.spaces
+
+        except ImportError as e:
+            pytest.skip(f"MJX wrapper not available: {e}")
+
+    def test_mjx_wrapper_reset(self, mock_mjx_env):
+        """Test MJX wrapper reset."""
+        try:
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            wrapper = MjxPlaygroundStdWrapper(mock_mjx_env)
+            obs, info = wrapper.reset()
+
+            # Should return standardized observations with "policy" key
+            assert "policy" in obs
+            assert obs["policy"].shape == (2, 12)
+
+        except ImportError as e:
+            pytest.skip(f"MJX wrapper not available: {e}")
+
+    def test_mjx_wrapper_step(self, mock_mjx_env):
+        """Test MJX wrapper step."""
+        try:
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            wrapper = MjxPlaygroundStdWrapper(mock_mjx_env)
+            wrapper.reset()
+
+            actions = torch.randn(2, 4)
+            obs, rewards, terminated, truncated, info = wrapper.step(actions)
+
+            # Should return standardized observations
+            assert "policy" in obs
+            assert obs["policy"].shape == (2, 12)
+            assert rewards.shape == (2,)
+            assert terminated.shape == (2,)
+            assert truncated.shape == (2,)
+
+        except ImportError as e:
+            pytest.skip(f"MJX wrapper not available: {e}")
+
+
 class TestSb3EnvStdWrapperOutputFormat:
     """Test that Sb3EnvStdWrapper produces consistent output format across all environments.
 
@@ -192,6 +302,7 @@ class TestSb3EnvStdWrapperOutputFormat:
     @pytest.fixture
     def mock_isaac_env_with_camera(self):
         """Create a mock Isaac-style environment with camera observations."""
+
         class MockIsaacEnvWithCamera:
             def __init__(self):
                 self.num_envs = 4
@@ -282,6 +393,7 @@ class TestSb3EnvStdWrapperOutputFormat:
 
     def test_sb3_wrapper_maniskill_output_format(self):
         """Test that Sb3EnvStdWrapper with ManiSkill wrapped env produces standardized format."""
+
         # Create mock ManiSkill environment
         class MockManiSkillEnv:
             def __init__(self):
@@ -308,7 +420,7 @@ class TestSb3EnvStdWrapperOutputFormat:
                         "base_camera": {
                             "rgb": torch.randint(0, 255, (self.num_envs, 3, 128, 128), dtype=torch.uint8),
                         }
-                    }
+                    },
                 }
                 info = {}
                 return obs, info
@@ -320,7 +432,7 @@ class TestSb3EnvStdWrapperOutputFormat:
                         "base_camera": {
                             "rgb": torch.randint(0, 255, (self.num_envs, 3, 128, 128), dtype=torch.uint8),
                         }
-                    }
+                    },
                 }
                 rewards = torch.randn(self.num_envs)
                 terminated = torch.zeros(self.num_envs, dtype=torch.bool)
@@ -367,6 +479,7 @@ class TestSb3EnvStdWrapperOutputFormat:
 
     def test_sb3_wrapper_aloha_output_format(self):
         """Test that Sb3EnvStdWrapper with Aloha wrapped env produces standardized format."""
+
         # Create mock Aloha environment
         class MockAlohaEnv:
             def __init__(self):
@@ -385,7 +498,7 @@ class TestSb3EnvStdWrapperOutputFormat:
                     "agent_pos": np.random.randn(14).astype(np.float32),
                     "pixels": {
                         "top": np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8),
-                    }
+                    },
                 }
                 info = {}
                 return obs, info
@@ -395,7 +508,7 @@ class TestSb3EnvStdWrapperOutputFormat:
                     "agent_pos": np.random.randn(14).astype(np.float32),
                     "pixels": {
                         "top": np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8),
-                    }
+                    },
                 }
                 reward = 0.0
                 terminated = False
@@ -437,8 +550,83 @@ class TestSb3EnvStdWrapperOutputFormat:
         except ImportError as e:
             pytest.skip(f"Aloha wrapper not available: {e}")
 
+    def test_sb3_wrapper_mjx_output_format(self):
+        """Test that Sb3EnvStdWrapper with MJX wrapped env produces standardized format."""
+
+        # Create mock MJX environment
+        class MockMjxEnv:
+            def __init__(self):
+                self.num_envs = 2
+                self.sim_device = "cpu"
+                self.unwrapped = self
+                self.render_mode = "rgb_array"
+                self.single_observation_space = spaces.Dict({
+                    "state": spaces.Box(low=-np.inf, high=np.inf, shape=(12,), dtype=np.float32),
+                    "camera": spaces.Box(low=0, high=255, shape=(64, 64, 3), dtype=np.uint8),
+                })
+                self.single_action_space = spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
+                self.observation_space = self.single_observation_space
+                self.action_space = self.single_action_space
+
+            def reset(self, **kwargs):
+                obs = {
+                    "state": torch.randn(self.num_envs, 12),
+                    "camera": torch.randint(0, 255, (self.num_envs, 64, 64, 3), dtype=torch.uint8),
+                }
+                info = {}
+                return obs, info
+
+            def step(self, action):
+                obs = {
+                    "state": torch.randn(self.num_envs, 12),
+                    "camera": torch.randint(0, 255, (self.num_envs, 64, 64, 3), dtype=torch.uint8),
+                }
+                rewards = torch.randn(self.num_envs)
+                terminated = torch.zeros(self.num_envs, dtype=torch.bool)
+                truncated = torch.zeros(self.num_envs, dtype=torch.bool)
+                info = {}
+                return obs, rewards, terminated, truncated, info
+
+            def render(self):
+                pass
+
+            def close(self):
+                pass
+
+            def seed(self, seed):
+                pass
+
+        try:
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            # First wrap with MJX wrapper to standardize to "policy" format
+            mock_env = MockMjxEnv()
+            mjx_wrapped = MjxPlaygroundStdWrapper(mock_env)
+
+            # Then wrap with Sb3 wrapper to get final standardized format
+            sb3_wrapped = Sb3EnvStdWrapper(mjx_wrapped)
+
+            # Test reset
+            obs = sb3_wrapped.reset()
+            assert isinstance(obs, dict), "Observations should be a dict"
+            assert "state" in obs, "Observations should have 'state' key"
+            assert "images" in obs, "Observations should have 'images' key"
+            assert obs["state"].shape == (2, 12), "State should have shape (num_envs, state_dim)"
+            assert "camera" in obs["images"], "Images should contain camera keys"
+
+            # Test step
+            actions = np.random.randn(2, 4).astype(np.float32)
+            obs, rewards, dones, infos = sb3_wrapped.step(actions)
+            assert "state" in obs, "Step observations should have 'state' key"
+            assert "images" in obs, "Step observations should have 'images' key"
+            assert rewards.shape == (2,), "Rewards should have shape (num_envs,)"
+
+        except ImportError as e:
+            pytest.skip(f"MJX wrapper not available: {e}")
+
     def test_sb3_wrapper_handles_termination(self, mock_isaac_env_with_camera):
         """Test that Sb3EnvStdWrapper properly handles episode termination."""
+
         # Create env that terminates
         class TerminatingEnv:
             def __init__(self, base_env):
@@ -481,7 +669,7 @@ class TestSb3EnvStdWrapperOutputFormat:
             obs, rewards, dones, infos = wrapped_env.step(actions)
 
         # Check that termination is handled properly
-        assert dones[0].item() == True, "First env should be done"
+        assert dones[0].item(), "First env should be done"
         assert "episode" in infos, "Infos should contain episode information"
         assert "rew" in infos["episode"], "Episode info should contain rewards"
         assert "len" in infos["episode"], "Episode info should contain length"

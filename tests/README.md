@@ -105,6 +105,7 @@ To run **all tests** including script integration:
    ```bash
    pip install isaaclab  # For Isaac Lab tests
    pip install mani_skill  # For ManiSkill tests
+   pip install playground  # For MuJoCo Playground tests
    pip install gym_aloha  # For Aloha tests
    ```
 
@@ -120,7 +121,10 @@ To run **all tests** including script integration:
    pytest tests/e2e/test_readme_training_scripts.py::TestTrainScriptIntegration::test_ppo_mlp_isaac_quick_training -v
 
    # Run with ManiSkill (requires ManiSkill installed)
-   pytest tests/e2e/test_readme_training_scripts.py::TestTrainScriptIntegration::test_ppo_maniskill_quick_training -v
+   pytest tests/e2e/test_readme_training_scripts.py::TestTrainScriptIntegration::test_ppo_mlp_maniskill_quick_training -v
+
+   # Run with MuJoCo Playground (requires mujoco_playground installed)
+   pytest tests/e2e/test_readme_training_scripts.py::TestTrainScriptIntegration::test_ppo_mlp_mjx_quick_training -v
 
    # Run with datasets (requires data/ populated)
    pytest tests/e2e/test_readme_training_scripts.py::TestTrainOffScriptIntegration::test_sl_lstm_quick_training -v

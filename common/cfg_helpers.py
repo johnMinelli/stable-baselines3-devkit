@@ -16,8 +16,9 @@ T = TypeVar("T")
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train an agent with Stable-Baselines3 XL.")
-    parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
     parser.add_argument("--trajectory", action="store_true", default=False, help="Record trajectories during training.")
+    parser.add_argument("--video", action="store_true", default=False, help="Record videos during training.")
+    parser.add_argument("--video_interval", type=int, default=1000, help="Every many steps record video of an episode.")
     parser.add_argument("--log_interval", type=int, default=10, help="Every many steps log training stats.")
     parser.add_argument("--val_interval", type=int, default=100, help="Every many steps record run validation.")
     parser.add_argument("--val_episodes", type=int, default=20, help="How many simulation episodes to run in validation.")

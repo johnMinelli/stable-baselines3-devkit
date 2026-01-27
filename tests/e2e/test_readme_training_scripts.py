@@ -42,7 +42,8 @@ class TestTrainScriptIntegration:
         """Test that train.py can be imported without errors."""
         try:
             # Try importing the main module
-            import train
+            import train  # noqa F401
+
             assert True
         except Exception as e:
             pytest.fail(f"Failed to import train.py: {e}")
@@ -53,7 +54,7 @@ class TestTrainScriptIntegration:
         """Test PPO MLP training with Isaac Lab for a few steps."""
         try:
             # Check if Isaac Lab is available
-            import isaaclab
+            import isaaclab  # noqa F401
         except ImportError:
             pytest.skip("Isaac Lab not available")
 
@@ -86,7 +87,7 @@ class TestTrainScriptIntegration:
     def test_ppo_lstm_isaac_quick_training(self):
         """Test PPO LSTM training with Isaac Lab for a few steps."""
         try:
-            import isaaclab
+            import isaaclab  # noqa F401
         except ImportError:
             pytest.skip("Isaac Lab not available")
 
@@ -114,10 +115,10 @@ class TestTrainScriptIntegration:
 
     @pytest.mark.slow
     @pytest.mark.integration
-    def test_ppo_maniskill_quick_training(self):
+    def test_ppo_mlp_maniskill_quick_training(self):
         """Test PPO with ManiSkill environment."""
         try:
-            import mani_skill
+            import mani_skill  # noqa F401
         except ImportError:
             pytest.skip("ManiSkill not available")
 
@@ -144,10 +145,40 @@ class TestTrainScriptIntegration:
 
     @pytest.mark.slow
     @pytest.mark.integration
-    def test_ppo_aloha_quick_training(self):
+    def test_ppo_mlp_mjx_quick_training(self):
+        """Test PPO with MuJoCo Playground environment."""
+        try:
+            import mujoco_playground  # noqa F401
+        except ImportError:
+            pytest.skip("MuJoCo Playground not available")
+
+        cmd = [
+            sys.executable, "train.py",
+            "--task", "CartpoleBalance",
+            "--envsim", "mujoco_playground",
+            "--num_envs", "2",
+            "--agent", "MujocoPlayground/cartpole_ppo_mlp_cfg",
+            "--device", "cuda",
+            "--sim_device", "cuda",
+            "--max_iterations", "2",
+            "--save_interval", "1000000",
+        ]
+
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+
+        assert result.returncode == 0, f"Training failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+
+    @pytest.mark.slow
+    @pytest.mark.integration
+    def test_ppo_mlp_aloha_quick_training(self):
         """Test PPO with Aloha environment."""
         try:
-            import gym_aloha
+            import gym_aloha  # noqa F401
         except ImportError:
             pytest.skip("gym_aloha not available")
 
@@ -176,7 +207,7 @@ class TestTrainScriptIntegration:
     def test_sac_mlp_isaac_quick_training(self):
         """Test SAC MLP (off-policy) training with Isaac Lab for a few steps."""
         try:
-            import isaaclab
+            import isaaclab  # noqa F401
         except ImportError:
             pytest.skip("Isaac Lab not available")
 
@@ -210,7 +241,8 @@ class TestTrainOffScriptIntegration:
     def test_train_off_script_imports(self):
         """Test that train_off.py can be imported."""
         try:
-            import train_off
+            import train_off  # noqa F401
+
             assert True
         except Exception as e:
             pytest.fail(f"Failed to import train_off.py: {e}")
@@ -226,7 +258,7 @@ class TestTrainOffScriptIntegration:
         #     pytest.skip(f"Dataset not found at {dataset_path}")
 
         try:
-            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset  # noqa F401
         except ImportError:
             pytest.skip("LeRobot not available")
 
@@ -260,7 +292,7 @@ class TestTrainOffScriptIntegration:
         #     pytest.skip(f"Dataset not found at {dataset_path}")
 
         try:
-            from lerobot.datasets.lerobot_dataset import LeRobotDataset
+            from lerobot.datasets.lerobot_dataset import LeRobotDataset  # noqa F401
         except ImportError:
             pytest.skip("LeRobot not available")
 
@@ -292,7 +324,8 @@ class TestPredictScriptIntegration:
     def test_predict_script_imports(self):
         """Test that predict.py can be imported."""
         try:
-            import predict
+            import predict  # noqa F401
+
             assert True
         except Exception as e:
             pytest.fail(f"Failed to import predict.py: {e}")
@@ -308,7 +341,7 @@ class TestPredictScriptIntegration:
             pytest.skip("No saved checkpoints found")
 
         try:
-            import isaaclab
+            import isaaclab  # noqa F401
         except ImportError:
             pytest.skip("Isaac Lab not available")
 
@@ -382,7 +415,8 @@ class TestConfigCompatibility:
             pytest.skip(f"Config file not found: {config_file}")
 
         import yaml
-        with open(config_file, "r") as f:
+
+        with open(config_file) as f:
             config = yaml.safe_load(f)
 
         assert config is not None
@@ -397,7 +431,7 @@ class TestEndToEndWorkflow:
     def test_train_and_predict_workflow(self, tmp_path):
         """Test training a model and then using it for prediction."""
         try:
-            import isaaclab
+            import isaaclab  # noqa F401
         except ImportError:
             pytest.skip("Isaac Lab not available")
 
@@ -468,5 +502,6 @@ class TestEndToEndWorkflow:
 
         # Cleanup
         import shutil
+
         if os.path.exists(save_dir):
             shutil.rmtree(save_dir)

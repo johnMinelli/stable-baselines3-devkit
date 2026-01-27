@@ -16,12 +16,20 @@ def main(args_cli, env_cfg, agent_cfg):
         import gym_aloha  # noqa: F401
     if args_cli.envsim == "maniskill":
         import mani_skill.envs  # noqa: F401
+    if args_cli.envsim == "mujoco_playground":
+        from mujoco_playground import registry  # noqa: F401
     # **customize at necessity with required import**
 
     from common.envs.sb3_env_wrapper import Sb3EnvStdWrapper, process_sb3_cfg
 
     def create_env():
-        env = gym.make(args_cli.task, **env_cfg)
+        # MuJoCo Playground uses registry.load() instead of gym.make()
+        if args_cli.envsim == "mujoco_playground":
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundGymWrapper
+
+            env = MjxPlaygroundGymWrapper(args_cli.task, **env_cfg)
+        else:
+            env = gym.make(args_cli.task, **env_cfg)
 
         # Env specific's wrappers
         if args_cli.envsim == "aloha":
@@ -39,6 +47,10 @@ def main(args_cli, env_cfg, agent_cfg):
             env = ManiSkillVectorEnv(env, auto_reset=False, ignore_terminations=False, record_metrics=True)
             env = FlattenActionSpaceWrapper(env)
             env = ManiSkillEnvStdWrapper(env)
+        elif args_cli.envsim == "mujoco_playground":
+            from common.envs.mjx_playground_wrapper import MjxPlaygroundStdWrapper
+
+            env = MjxPlaygroundStdWrapper(env)
         elif args_cli.envsim == "isaaclab" and isinstance(env.unwrapped, DirectMARLEnv):
             env = multi_agent_to_single_agent(env)
         # **customize at necessity with required wrapper other envs**
@@ -136,6 +148,19 @@ if __name__ == "__main__":
                 p = camera_cfg["pose"][:3]
                 q = camera_cfg["pose"][3:]
                 env_cfg["sensor_configs"][camera_name]["pose"] = Pose(p=p, q=q)
+
+    elif args_cli.envsim == "mujoco_playground":
+        agent_cfg = get_cfg(args_cli)
+        env_cfg = {
+            "num_envs": args_cli.num_envs,
+            "seed": agent_cfg.get("seed"),
+            "device": args_cli.sim_device,
+            "render_mode": "human" if not args_cli.video else "rgb_array",
+            "max_episode_steps": agent_cfg.get("env_cfg", {}).get("max_episode_steps", 1000),
+            "camera_resolution": agent_cfg.get("env_cfg", {}).get("camera_resolution", (640, 480)),
+        }
+        if "env_cfg" in agent_cfg:
+            del agent_cfg["env_cfg"]
 
     # launch script
     main(args_cli, env_cfg, agent_cfg)
