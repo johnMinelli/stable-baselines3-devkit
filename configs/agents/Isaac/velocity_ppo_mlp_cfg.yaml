@@ -29,7 +29,7 @@ policy: 'MlpPolicy'
 policy_kwargs:
   net_arch: !!seq [256, 256]
   activation: 'elu'
-  use_log_std: true
+  use_log_std: false
   # Training parameters
   optimizer_kwargs:
     eps: !!float 1e-08
