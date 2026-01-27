@@ -22,14 +22,14 @@ This framework provides a unified interface for training policies using either s
 ## Key Features
 
 ### Unified Data Interface
-- **Environment-agnostic**: Works with Isaac Lab, ManiSkill, Aloha and other custom Gym environments
+- **Environment-agnostic**: Works with Isaac Lab, ManiSkill, MuJoCo Playground, Aloha and other custom Gym environments
 - **Dataset-agnostic**: Compatible with LeRobot datasets
 - Shared data format ensures policies work seamlessly across sources
 
 ### Flexible Training Algorithms
 - **Supervised Learning**: Behavior cloning from demonstrations
 - **On-policy RL**: PPO, Recurrent PPO, Transformer PPO (! efficient rollout buffer implementation !)
-- **Off-policy RL**: SAC
+- **Off-policy RL**: SAC, FastSAC
 
 ### Out-of-the-box Features
 - Distributed training with Accelerate
@@ -48,7 +48,7 @@ The framework follows a layered architecture that separates concerns:
 ### Component Hierarchy
 
 1. **Data Sources**
-   - **Environments**: Isaac Lab, ManiSkill, Aloha (via SB3 Wrapper), or contribute implementing your own!
+   - **Environments**: Isaac Lab, ManiSkill, MuJoCo Playground, Aloha (via SB3 Wrapper), or contribute implementing your own!
    - **Datasets**: LeRobot demonstrations (via DS Wrapper)
    - Both produce standardized observation/action dictionaries
 
@@ -61,12 +61,12 @@ The framework follows a layered architecture that separates concerns:
    - Manage training loops (rollout collection, batch optimization)
    - Interface with policies through preprocessors
    - Handle loss computation and gradient updates
-   - Examples: `PPO`, `RecurrentPPO`, `TransformerPPO`, `SAC`, `SL`
+   - Examples: `PPO`, `RecurrentPPO`, `TransformerPPO`, `SAC`, `FastSAC`, `SL`
 
 4. **Policies**
    - Neural network architectures (actor-critic or standalone)
    - Independent of data source or training algorithm
-   - Examples: `MlpPolicy`, `LSTMPolicy`, `TransformerPolicy`, `SACPolicy`, `TCNPolicy`
+   - Examples: `MlpPolicy`, `LSTMPolicy`, `TransformerPolicy`, `SACPolicy`, `FastSACPolicy`, `TCNPolicy`
 
 5. **Entry Points**
    - `train.py`: Online RL from simulation
